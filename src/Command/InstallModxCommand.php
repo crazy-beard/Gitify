@@ -35,6 +35,12 @@ class InstallModxCommand extends BaseCommand
                 'The version of MODX to install, in the format 2.3.2-pl. Leave empty or specify "latest" to install the last stable release.',
                 'latest'
             )
+            ->addArgument(
+                'config',
+                InputArgument::OPTIONAL,
+                'The config.xml file with options to install without interactive dialog.',
+                ''
+            )
             ->addOption(
                 'download',
                 'd',
@@ -54,13 +60,16 @@ class InstallModxCommand extends BaseCommand
     {
         $version = $this->input->getArgument('version');
         $forced = $this->input->getOption('download');
+        $config = $this->input->getArgument('config');
 
         if (!$this->getMODX($version, $forced)) {
             return 1; // exit
         }
 
         // Create the XML config
-        $config = $this->createMODXConfig();
+        if (!$config) {
+          $config = $this->createMODXConfig();
+        }
 
         // Variables for running the setup
         $tz = date_default_timezone_get();
@@ -96,7 +105,7 @@ class InstallModxCommand extends BaseCommand
         $question = new Question("Database Host [{$defaultDbHost}]: ", $defaultDbHost);
         $dbHost = $helper->ask($this->input, $this->output, $question);
 
-        $defaultDbName = basename(GITIFY_WORKING_DIR);
+        $defaultDbName = preg_replace('/\W/', '', basename(GITIFY_WORKING_DIR));
         $question = new Question("Database Name [{$defaultDbName}]: ", $defaultDbName);
         $dbName = $helper->ask($this->input, $this->output, $question);
 
@@ -107,7 +116,8 @@ class InstallModxCommand extends BaseCommand
         $question->setHidden(true);
         $dbPass = $helper->ask($this->input, $this->output, $question);
 
-        $question = new Question('Database Prefix [modx_]: ', 'modx_');
+        $defaultDbPrefix = substr(md5(GITIFY_WORKING_DIR), rand(0, 22), rand(4, 8)) . '_';
+        $question = new Question("Database Prefix [{$defaultDbPrefix}]: ", $defaultDbPrefix);
         $dbPrefix = $helper->ask($this->input, $this->output, $question);
 
         $question = new Question('Hostname [' . gethostname() . ']: ', gethostname());
@@ -123,7 +133,7 @@ class InstallModxCommand extends BaseCommand
         $question = new Question('Manager Language [en]: ', 'en');
         $language = $helper->ask($this->input, $this->output, $question);
 
-        $defaultMgrUser = basename(GITIFY_WORKING_DIR) . '_admin';
+        $defaultMgrUser = $defaultDbName . '_admin';
         $question = new Question('Manager User [' . $defaultMgrUser . ']: ', $defaultMgrUser);
         $managerUser = $helper->ask($this->input, $this->output, $question);
 
@@ -141,7 +151,7 @@ class InstallModxCommand extends BaseCommand
         $managerPass = $helper->ask($this->input, $this->output, $question);
 
         if ($managerPass == 'generate') {
-            $managerPass = substr(str_shuffle(md5(microtime(true))), 0, rand(8, 15));
+            $managerPass = substr(str_shuffle(preg_replace('/\W/', '', base64_encode(md5(microtime(true) . rand(), true)))), 0, rand(12, 16));
             $this->output->writeln("<info>Generated Manager Password: {$managerPass}</info>");
         }
 
